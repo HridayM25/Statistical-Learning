@@ -197,7 +197,7 @@ def ml_model(path):
         return (0.0, 0.0)
 
 def predict_damping(viscosity, density):
-    model = joblib.load(r"\models\damping.joblib")
+    model = joblib.load('models/damping.joblib')  # Fixed the path
     new_data = pd.DataFrame([[viscosity, density]], columns=['Viscosity', 'Density'])
     prediction = model.predict(new_data)
     return prediction[0]
@@ -440,6 +440,48 @@ def response_data_endpoint():
         print(f"Error in response_data_endpoint: {e}")
         print(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/predict_damping', methods=['POST'])
+def predict_damping_endpoint():
+    """Endpoint to predict damping ratio from viscosity and density."""
+    try:
+        print("Handling damping prediction request")
+        data = request.get_json()
+        
+        if not data or 'viscosity' not in data or 'density' not in data:
+            return jsonify({'error': 'Missing required parameters'}), 400
+            
+        viscosity = float(data['viscosity'])
+        density = float(data['density'])
+        
+        print(f"Predicting damping with viscosity: {viscosity}, density: {density}")
+        
+        # Get damping prediction
+        damping_ratio = predict_damping(viscosity, density)
+        
+        # Determine damping type
+        damping_type = "Underdamped"
+        if damping_ratio >= 1.0:
+            damping_type = "Overdamped" 
+        elif damping_ratio >= 0.7:
+            damping_type = "Near Critical"
+            
+        # Calculate logarithmic decrement for underdamped systems
+        log_decrement = 0
+        if damping_ratio < 1.0:
+            log_decrement = 2 * np.pi * damping_ratio / np.sqrt(1 - damping_ratio**2)
+            
+        return jsonify({
+            'success': True,
+            'damping_ratio': float(damping_ratio),
+            'damping_type': damping_type,
+            'log_decrement': float(log_decrement)
+        })
+        
+    except Exception as e:
+        print(f"Error predicting damping: {e}")
+        print(traceback.format_exc())
+        return jsonify({'error': f'An internal error occurred: {str(e)}'}), 500
 
 @app.route('/static/<path:path>')
 def serve_static(path):

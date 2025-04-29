@@ -1778,43 +1778,77 @@
             }
         }
         
-        // Function to analyze fluid properties (dummy for now)
+        // Function to analyze fluid properties (calling backend prediction)
         function analyzeFluidProperties() {
             try {
                 // Get values from inputs
                 const density = parseFloat(document.getElementById('densityInput').value);
                 const viscosity = parseFloat(document.getElementById('viscosityInput').value);
                 
-                // For demonstration, calculate a dummy damping ratio based on the inputs
-                // This would be replaced by actual backend calculation later
-                const dummyDampingRatio = (viscosity / density) * 0.05;
-                
-                // Update the damping ratio display
-                document.getElementById('dampingRatio').innerText = dummyDampingRatio.toFixed(4);
-                
-                // Determine damping type
-                let dampingType = "";
-                if (dummyDampingRatio < 0.7) {
-                    dampingType = "Underdamped";
-                } else if (dummyDampingRatio < 1.2) {
-                    dampingType = "Near Critical";
-                } else {
-                    dampingType = "Overdamped";
-                }
-                
-                // Update damping type display
-                document.getElementById('viscDampingType').textContent = dampingType;
-                
-                // Update analysis status
-                document.getElementById('analysisStatus').innerHTML = `
-                    <i class="fas fa-check-circle me-2 text-success"></i>
-                    <strong>Analysis complete!</strong> Results reflect fluid properties with density ${density} kg/m³ and viscosity ${viscosity} mPa·s.
+                // Show loading state
+                document.getElementById('dampingRatio').innerHTML = `
+                    <div class="spinner-border text-primary" role="status" style="width: 1.5rem; height: 1.5rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
                 `;
-                document.getElementById('analysisStatus').classList.remove('alert-info');
-                document.getElementById('analysisStatus').classList.add('alert-success');
+                document.getElementById('viscDampingType').innerHTML = `Loading...`;
+                document.getElementById('analysisStatus').innerHTML = `
+                    <i class="fas fa-info-circle me-2"></i>
+                    Analyzing fluid properties...
+                `;
                 
-                // Update the chart with new "data"
-                updateFluidResponseChart(dummyDampingRatio);
+                // Call the backend to predict damping
+                fetch('/predict_damping', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        density: density,
+                        viscosity: viscosity
+                    }),
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    
+                    // Update the damping ratio display
+                    document.getElementById('dampingRatio').innerText = data.damping_ratio.toFixed(4);
+                    
+                    // Update damping type display
+                    document.getElementById('viscDampingType').textContent = data.damping_type;
+                    
+                    // Update analysis status
+                    document.getElementById('analysisStatus').innerHTML = `
+                        <i class="fas fa-check-circle me-2 text-success"></i>
+                        <strong>Analysis complete!</strong> Results show a ${data.damping_type.toLowerCase()} system with damping ratio ${data.damping_ratio.toFixed(4)}.
+                        ${data.damping_ratio < 1.0 ? `<br>Logarithmic decrement (δ): ${data.log_decrement.toFixed(5)}` : ''}
+                    `;
+                    document.getElementById('analysisStatus').classList.remove('alert-info', 'alert-danger');
+                    document.getElementById('analysisStatus').classList.add('alert-success');
+                    
+                    // Update the chart with predicted damping ratio
+                    updateFluidResponseChart(data.damping_ratio);
+                    
+                })
+                .catch(error => {
+                    console.error("Error analyzing fluid properties:", error);
+                    document.getElementById('dampingRatio').innerText = "--";
+                    document.getElementById('viscDampingType').innerText = "--";
+                    document.getElementById('analysisStatus').innerHTML = `
+                        <i class="fas fa-exclamation-circle me-2 text-danger"></i>
+                        <strong>Error:</strong> ${error.message || 'Failed to analyze fluid properties. Please check your inputs.'}
+                    `;
+                    document.getElementById('analysisStatus').classList.remove('alert-info', 'alert-success');
+                    document.getElementById('analysisStatus').classList.add('alert-danger');
+                });
                 
             } catch (error) {
                 console.error("Error analyzing fluid properties:", error);
@@ -1822,7 +1856,7 @@
                     <i class="fas fa-exclamation-circle me-2 text-danger"></i>
                     <strong>Error:</strong> Failed to analyze fluid properties. Please check your inputs.
                 `;
-                document.getElementById('analysisStatus').classList.remove('alert-info');
+                document.getElementById('analysisStatus').classList.remove('alert-info', 'alert-success');
                 document.getElementById('analysisStatus').classList.add('alert-danger');
             }
         }
@@ -1840,13 +1874,24 @@
                 const data = [];
                 const timeStep = 0.1;
                 const maxTime = 20;
+                const naturalFreq = 2; // Example natural frequency
                 
-                // Create "damped" data that reflects the damping ratio (simplified for UI demonstration)
+                // Create response data using actual damping math
                 for (let t = 0; t <= maxTime; t += timeStep) {
-                    // Adjust frequency and decay rate based on damping ratio
-                    const decayRate = dampingRatio * 0.8;
-                    const frequency = 2 * (1 - Math.min(dampingRatio, 0.9) * 0.5);
-                    const amplitude = Math.exp(-decayRate * t) * Math.cos(frequency * t);
+                    let amplitude;
+                    if (dampingRatio < 1.0) {
+                        // Underdamped
+                        const dampedFreq = naturalFreq * Math.sqrt(1 - dampingRatio * dampingRatio);
+                        amplitude = Math.exp(-dampingRatio * naturalFreq * t) * Math.cos(dampedFreq * t);
+                    } else if (Math.abs(dampingRatio - 1.0) < 0.001) {
+                        // Critically damped
+                        amplitude = Math.exp(-naturalFreq * t) * (1 + naturalFreq * t);
+                    } else {
+                        // Overdamped
+                        const s1 = -dampingRatio * naturalFreq + naturalFreq * Math.sqrt(dampingRatio * dampingRatio - 1);
+                        const s2 = -dampingRatio * naturalFreq - naturalFreq * Math.sqrt(dampingRatio * dampingRatio - 1);
+                        amplitude = ((Math.exp(s1 * t) - Math.exp(s2 * t)) / (s1 - s2));
+                    }
                     data.push(amplitude);
                 }
                 
