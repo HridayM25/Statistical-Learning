@@ -67,7 +67,7 @@ def get_response_data(material_name, viscosity=None, density=None, experimental_
                 
                 # If viscosity and density are provided, use them to predict damping
                 if viscosity is not None and density is not None:
-                    zeta_actual = predict_damping(viscosity, density) + 2*(1 - np.cos(viscosity))/10
+                    zeta_actual = predict_damping(viscosity, density) + (1 - np.cos(viscosity))/10
                 else:
                     zeta_actual = float(row['Symbolic'])
             else:
@@ -84,7 +84,7 @@ def get_response_data(material_name, viscosity=None, density=None, experimental_
             
             # If viscosity and density are provided, use them to predict damping
             if viscosity is not None and density is not None:
-                zeta_actual = predict_damping(viscosity, density) + 2*(1 - np.cos(viscosity))/10
+                zeta_actual = predict_damping(viscosity, density) + (1 - np.cos(viscosity))/10
             else:
                 zeta_actual = 0.03 + np.random.random() * 0.1  # Between 0.03 and 0.13
         
@@ -560,7 +560,7 @@ def analyze_viscosity():
         # Predict damping
         print(f"Viscosity from analyze_viscosity: {viscosity}")
         print(f"Density from analyze_viscosity: {density}")
-        damping_ratio = predict_damping(viscosity, density) + 2*(1 - np.cos(viscosity))/10
+        damping_ratio = predict_damping(viscosity, density) + (1 - np.cos(viscosity))/10
 
         print(f"Damping ratio from analyze_viscosity: {damping_ratio}")
         
